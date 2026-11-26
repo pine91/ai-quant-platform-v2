@@ -1,5 +1,6 @@
 """Read-only historical candle adapters. No order execution."""
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import httpx
 from .markets import Market, Instrument
 from .timeframes import Timeframe, DEFAULT_TIMEFRAME, BITHUMB_MINUTES, YAHOO_INTERVALS, YAHOO_RANGES
@@ -27,13 +28,34 @@ async def candles(instrument: Instrument, timeframe: Timeframe = DEFAULT_TIMEFRA
                 raise ValueError("Expected six-digit code with optional .KS (KOSPI) or .KQ (KOSDAQ)")
         elif not symbol.replace("-", "").replace(".", "").isalnum():
             raise ValueError("Invalid stock symbol")
-        if timeframe == Timeframe.H4:
-            raise ValueError("Stock 4h candles require session-aware aggregation")
+        aggregate = timeframe == Timeframe.H4
+        if aggregate:
+            timeframe = Timeframe.H1
         response = await client.get("https://query1.finance.yahoo.com/v8/finance/chart/" + symbol,
             params={"range": YAHOO_RANGES[timeframe.value], "interval": YAHOO_INTERVALS[timeframe.value]}, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
         result = response.json()["chart"]["result"][0]
         quote = result["indicators"]["quote"][0]
-        return [{"time": t, **{k: quote[k][i] for k in ("open","high","low","close")}}
+        rows = [{"time": t, **{k: quote[k][i] for k in ("open","high","low","close")}}
                 for i,t in enumerate(result["timestamp"])
                 if all(quote[k][i] is not None for k in ("open","high","low","close"))]
+
+        if not aggregate:
+            return rows
+        zone = ZoneInfo("Asia/Seoul" if instrument.market == Market.KR_STOCK else "America/New_York")
+        start = 540 if instrument.market == Market.KR_STOCK else 570
+        groups = {}
+        for row in sorted(rows, key=lambda r: r["time"]):
+            local = datetime.fromtimestamp(row["time"], zone)
+            offset = local.hour * 60 + local.minute - start
+            if not 0 <= offset < 390:
+                continue
+            key = (local.date(), offset // 240)
+            if key not in groups:
+                groups[key] = dict(row)
+            else:
+                bar = groups[key]
+                bar["high"] = max(bar["high"], row["high"])
+                bar["low"] = min(bar["low"], row["low"])
+                bar["close"] = row["close"]
+        return list(groups.values())
