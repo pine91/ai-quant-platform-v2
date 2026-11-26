@@ -17,8 +17,34 @@ function App() {
   const [session, setSession] = useState("regular");
   const [venue, setVenue] = useState("");
   const [status, setStatus] = useState("조회 중");
+  const [analysis, setAnalysis] = useState<{summary: string; evidence: {data_time: string; last_candle: {close: number}; currency: string}}>();
+  const [analysisStatus, setAnalysisStatus] = useState("");
+  const analysisRequest = useRef<AbortController | null>(null);
+  const query = new URLSearchParams({symbol, timeframe, session, ...(venue ? {venue} : {})});
+  async function requestAnalysis() {
+    analysisRequest.current?.abort();
+    const controller = new AbortController();
+    analysisRequest.current = controller;
+    setAnalysis(undefined);
+    setAnalysisStatus("분석 중");
+    try {
+      const response = await fetch("/api/markets/" + market + "/analysis?" + query, {
+        method: "POST", signal: controller.signal,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : "분석 실패");
+      if (!controller.signal.aborted) {
+        setAnalysis(result);
+        setAnalysisStatus("");
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) setAnalysisStatus(error instanceof Error ? error.message : "분석 실패");
+    }
+  }
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    setAnalysis(undefined);
+    setAnalysisStatus("");
     if (!host.current) return;
     const chart = createChart(host.current, {
       autoSize: true,
@@ -37,7 +63,7 @@ function App() {
     rsi.createPriceLine({price: 70, color: "#64748b", lineWidth: 1, title: "70"});
     const controller = new AbortController();
     setStatus("조회 중");
-    fetch("/api/markets/" + market + "/candles?" + new URLSearchParams({symbol, timeframe, session, ...(venue ? {venue} : {})}), {signal: controller.signal})
+    fetch("/api/markets/" + market + "/candles?" + query, {signal: controller.signal})
       .then(async response => { if (!response.ok) {
         const error = await response.json().catch(() => null);
         throw new Error(typeof error?.detail === "string" ? error.detail : "시세 조회 실패 (" + response.status + ")");
@@ -58,7 +84,7 @@ function App() {
         chart.timeScale().fitContent();
         setStatus(result.candles.length ? "시세 조회 완료" : "조회 데이터 없음");
       }).catch(error => { if (!controller.signal.aborted) setStatus(String(error.message)); });
-    return () => { controller.abort(); chart.remove(); };
+    return () => { controller.abort(); analysisRequest.current?.abort(); chart.remove(); };
   }, [market,symbol,timeframe,session,venue]);
   return <main style={{maxWidth:1200,margin:"auto",padding:24,fontFamily:"system-ui,sans-serif"}}>
     <h1>AI Quant Platform V2</h1>
@@ -78,7 +104,14 @@ function App() {
     </div>
     <p>{symbol} · {market==="us_stock"?"USD":"KRW"} · {timeframe} · {status}</p>
     <div ref={host} style={{height:460,width:"100%"}} />
-    <section><h2>AI 분석</h2><p>AI 분석 연동 예정</p></section>
+    <section><h2>AI 분석</h2>
+      <button onClick={requestAnalysis} disabled={status !== "시세 조회 완료" || analysisStatus === "분석 중"}>차트 분석</button>
+      <p role="status">{analysisStatus}</p>
+      {analysis && <>
+        <p>근거 시각 {new Date(analysis.evidence.data_time).toLocaleString()} · 종가 {analysis.evidence.last_candle.close} {analysis.evidence.currency}</p>
+        <p style={{whiteSpace: "pre-wrap"}}>{analysis.summary}</p>
+      </>}
+    </section>
   </main>;
 }
 createRoot(document.getElementById("root")!).render(<App />);

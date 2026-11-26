@@ -111,3 +111,33 @@ def test_nxt_without_credentials_returns_unconfigured(upstream, monkeypatch):
     response = TestClient(app).get("/api/markets/kr_stock/candles?symbol=005930&venue=nxt&timeframe=1m")
     assert response.status_code == 503
     assert response.json()["detail"] == "KIS quotes not configured"
+
+
+def test_analysis_uses_read_only_snapshot(upstream, monkeypatch):
+    import json
+
+    monkeypatch.setenv("OPENAI_API_KEY", "fixture")
+    calls = []
+
+    def handle(request):
+        calls.append(request.url.host)
+        if request.url.host.startswith("query1."):
+            return httpx.Response(200, json=yahoo(["2025-03-10T13:30"]))
+        payload = json.loads(request.content)
+        if payload["tool_choice"] == "none":
+            snapshot = json.loads(payload["messages"][-1]["content"])
+            assert snapshot["last_candle"]["close"] == 15
+            assert snapshot["data_time"] == "2025-03-10T13:30:00+00:00"
+            message = {"role": "assistant", "content": "종가 15"}
+        else:
+            message = {"role": "assistant", "tool_calls": [{
+                "id": "fixture", "type": "function",
+                "function": {"name": "read_chart_snapshot", "arguments": "{}"},
+            }]}
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    upstream(handle)
+    response = TestClient(app).post("/api/markets/us_stock/analysis?symbol=AAPL")
+    assert response.status_code == 200
+    assert response.json()["evidence"]["last_candle"]["close"] == 15
+    assert calls == ["api.openai.com", "query1.finance.yahoo.com", "api.openai.com"]

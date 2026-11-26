@@ -18,6 +18,7 @@ from .market_data import ProviderError, candles
 from .overnight import overnight_candles
 from .kis import kis_candles
 from .indicators import indicators
+from .analysis import analyze_chart
 from .timeframes import Timeframe, DEFAULT_TIMEFRAME
 
 @app.get("/api/markets/{market}/candles")
@@ -47,3 +48,12 @@ async def market_candles(market: Market, symbol: str, timeframe: Timeframe = DEF
         raise HTTPException(status_code=422, detail="Invalid symbol or market data") from exc
     except (ProviderError, httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
         raise HTTPException(status_code=502, detail="Market data provider unavailable") from exc
+
+
+@app.post("/api/markets/{market}/analysis")
+async def market_analysis(
+    market: Market, symbol: str, timeframe: Timeframe = DEFAULT_TIMEFRAME,
+    session: Literal["regular", "pre", "post", "overnight"] = "regular",
+    venue: Literal["krx", "nxt"] | None = None,
+):
+    return await analyze_chart(lambda: market_candles(market, symbol, timeframe, session, venue))
