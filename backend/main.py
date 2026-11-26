@@ -17,6 +17,7 @@ from .markets import Market, Instrument
 from .market_data import ProviderError, candles
 from .overnight import overnight_candles
 from .kis import kis_candles
+from .indicators import indicators
 from .timeframes import Timeframe, DEFAULT_TIMEFRAME
 
 @app.get("/api/markets/{market}/candles")
@@ -39,7 +40,7 @@ async def market_candles(market: Market, symbol: str, timeframe: Timeframe = DEF
         else:
             rows = await candles(instrument, timeframe, session=session)
         return {"market": market, "symbol": symbol, "currency": instrument.currency,
-                "interval": timeframe.value, "session": session, "venue": venue, "candles": rows}
+                "interval": timeframe.value, "session": session, "venue": venue, "candles": rows, "indicators": indicators(rows)}
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Market data provider not configured") from exc
     except ValueError as exc:

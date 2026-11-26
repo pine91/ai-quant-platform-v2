@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { createChart, CandlestickSeries, ColorType, type UTCTimestamp } from "lightweight-charts";
+import { createChart, CandlestickSeries, LineSeries, ColorType, type UTCTimestamp } from "lightweight-charts";
 
 const markets = {
   crypto: ["BTC-KRW", "ETH-KRW"],
@@ -30,6 +30,11 @@ function App() {
       upColor: "#ef4444", downColor: "#2563eb", borderVisible: false,
       wickUpColor: "#ef4444", wickDownColor: "#2563eb"
     });
+    const ema20 = chart.addSeries(LineSeries, {color: "#fbbf24", lineWidth: 1, title: "EMA20"});
+    const ema60 = chart.addSeries(LineSeries, {color: "#a78bfa", lineWidth: 1, title: "EMA60"});
+    const rsi = chart.addSeries(LineSeries, {color: "#22c55e", lineWidth: 1, title: "RSI14"}, 1);
+    rsi.createPriceLine({price: 30, color: "#64748b", lineWidth: 1, title: "30"});
+    rsi.createPriceLine({price: 70, color: "#64748b", lineWidth: 1, title: "70"});
     const controller = new AbortController();
     setStatus("조회 중");
     fetch("/api/markets/" + market + "/candles?" + new URLSearchParams({symbol, timeframe, session, ...(venue ? {venue} : {})}), {signal: controller.signal})
@@ -41,6 +46,15 @@ function App() {
       .then(result => {
         if (controller.signal.aborted) return;
         series.setData(result.candles.map((c: {time:number;open:number;high:number;low:number;close:number}) => ({...c,time:c.time as UTCTimestamp})));
+        ema20.setData(result.indicators.ema20);
+        ema60.setData(result.indicators.ema60);
+        rsi.setData(result.indicators.rsi14);
+        for (const level of result.indicators.fibonacci) {
+          series.createPriceLine({
+            price: level.value, color: "#64748b", lineWidth: 1,
+            title: `Fib ${level.ratio * 100}%`, axisLabelVisible: false,
+          });
+        }
         chart.timeScale().fitContent();
         setStatus(result.candles.length ? "시세 조회 완료" : "조회 데이터 없음");
       }).catch(error => { if (!controller.signal.aborted) setStatus(String(error.message)); });
