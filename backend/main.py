@@ -1,3 +1,4 @@
+import os
 from typing import Literal
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -23,6 +24,8 @@ async def market_candles(market: Market, symbol: str, timeframe: Timeframe = DEF
     try:
         instrument = Instrument(market=market, symbol=symbol)
         if session == "overnight":
+            if os.getenv("ENABLE_OVERNIGHT", "false").lower() != "true":
+                raise HTTPException(status_code=503, detail="Overnight trading data is disabled")
             if market != Market.US_STOCK:
                 raise ValueError("Overnight is US stock only")
             rows = await overnight_candles(symbol, timeframe.value)
