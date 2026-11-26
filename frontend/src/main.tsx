@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { Simulation } from "./simulation";
 import { createChart, CandlestickSeries, LineSeries, ColorType, type UTCTimestamp } from "lightweight-charts";
 
 const markets = {
@@ -112,6 +113,7 @@ function App() {
         <p style={{whiteSpace: "pre-wrap"}}>{analysis.summary}</p>
       </>}
     </section>
+    <Simulation key={market + query.toString()} base={"/api/markets/" + market} query={query.toString()} ready={status === "시세 조회 완료"} />
   </main>;
 }
 createRoot(document.getElementById("root")!).render(<App />);
