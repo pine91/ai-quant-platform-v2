@@ -14,14 +14,15 @@ from fastapi import HTTPException
 import httpx
 from .markets import Market, Instrument
 from .market_data import candles
+from .timeframes import Timeframe, DEFAULT_TIMEFRAME
 
 @app.get("/api/markets/{market}/candles")
-async def market_candles(market: Market, symbol: str):
+async def market_candles(market: Market, symbol: str, timeframe: Timeframe = DEFAULT_TIMEFRAME):
     try:
         instrument = Instrument(market=market, symbol=symbol)
-        rows = await candles(instrument)
+        rows = await candles(instrument, timeframe)
         return {"market": market, "symbol": symbol, "currency": instrument.currency,
-                "interval": "1d", "candles": rows}
+                "interval": timeframe.value, "candles": rows}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid symbol or market data") from exc
     except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
