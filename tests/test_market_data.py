@@ -141,3 +141,27 @@ def test_analysis_uses_read_only_snapshot(upstream, monkeypatch):
     assert response.status_code == 200
     assert response.json()["evidence"]["last_candle"]["close"] == 15
     assert calls == ["api.openai.com", "query1.finance.yahoo.com", "api.openai.com"]
+
+
+def test_invalid_upstream_json_is_a_provider_error(upstream):
+    upstream(lambda request: httpx.Response(200, text="<html>temporarily unavailable</html>"))
+    response = TestClient(app).get("/api/markets/us_stock/candles?symbol=AAPL")
+    assert response.status_code == 502
+
+
+def test_korean_stock_regular_four_hour_candles_stop_at_close(upstream):
+    def handle(request):
+        assert request.url.path.endswith("247540.KQ")
+        return httpx.Response(200, json=yahoo([
+            "2025-03-10T00:00", "2025-03-10T03:00",
+            "2025-03-10T04:00", "2025-03-10T06:30",
+            "2025-03-11T00:00",
+        ]))
+
+    upstream(handle)
+    response = TestClient(app).get("/api/markets/kr_stock/candles?symbol=247540.KQ&timeframe=4h")
+    assert response.status_code == 200
+    assert [row["time"] for row in response.json()["candles"]] == [
+        stamp("2025-03-10T00:00"), stamp("2025-03-10T04:00"), stamp("2025-03-11T00:00"),
+    ]
+    assert response.json()["candles"][0]["close"] == 16

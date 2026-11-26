@@ -15,7 +15,7 @@ from .analysis import analyze_chart
 from .cache import cached_candles
 from .indicators import indicators
 from .kis import kis_candles
-from .market_data import ProviderError, candles
+from .market_data import ProviderError, candles, validated_candles
 from .markets import Instrument, Market
 from .overnight import overnight_candles
 from .simulation import backtest
@@ -56,13 +56,14 @@ async def market_candles(market: Market, symbol: Annotated[str, Query(min_length
         else:
             cache_key = "quant-v2:candles:" + json.dumps([market.value, symbol.upper(), timeframe.value, session])
             rows = await cached_candles(cache_key, lambda: candles(instrument, timeframe, session=session))
+        rows = validated_candles(rows)
         return {"market": market, "symbol": symbol, "currency": instrument.currency,
                 "interval": timeframe.value, "session": session, "venue": venue, "candles": rows, "indicators": indicators(rows)}
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Market data provider not configured") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid symbol or market data") from exc
-    except (ProviderError, httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
+    except (ProviderError, httpx.HTTPError, KeyError, IndexError, TypeError, AttributeError) as exc:
         raise HTTPException(status_code=502, detail="Market data provider unavailable") from exc
 
 
@@ -85,8 +86,6 @@ async def market_backtest(
     slippage_bps: Annotated[float, Query(ge=0, le=1000)] = 5,
 ):
     snapshot = await market_candles(market, symbol, timeframe, session, venue)
-    if any(min(bar["open"], bar["close"]) <= 0 for bar in snapshot["candles"]):
-        raise HTTPException(502, "Invalid execution prices")
     return {**backtest(snapshot["candles"], initial_cash, fee_bps, slippage_bps),
             "currency": snapshot["currency"]}
 

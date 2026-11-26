@@ -90,18 +90,18 @@ function App() {
   return <main style={{maxWidth:1200,margin:"auto",padding:24,fontFamily:"system-ui,sans-serif"}}>
     <h1>AI Quant Platform V2</h1>
     <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-      <label>시장 <select value={market} onChange={e=>{const m=e.target.value as Market;setMarket(m);setSymbol(markets[m][0]);setSession("regular");setVenue("");}}>
+      <label>시장 <select aria-label="시장" value={market} onChange={e=>{const m=e.target.value as Market;setMarket(m);setSymbol(markets[m][0]);setSession("regular");setVenue("");}}>
         {Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}
       </select></label>
-      <label>종목 <select value={symbol} onChange={e=>setSymbol(e.target.value)}>
+      <label>종목 <select aria-label="종목" value={symbol} onChange={e=>setSymbol(e.target.value)}>
         {markets[market].map(s=><option key={s}>{s}</option>)}
       </select></label>
-      <label>시간대 <select value={timeframe} onChange={e=>setTimeframe(e.target.value)}>{["1m","5m","15m","30m","1h","4h","1d","1w"].map(t=><option key={t} value={t} disabled={venue ? !["1m","1d","1w"].includes(t) : session!=="regular" && !["1m","5m","15m","30m"].includes(t)}>{t}</option>)}</select></label>
-      {market === "kr_stock" && <label>시세 출처 <select value={venue} onChange={e => {
+      <label>시간대 <select aria-label="시간대" value={timeframe} onChange={e=>setTimeframe(e.target.value)}>{["1m","5m","15m","30m","1h","4h","1d","1w"].map(t=><option key={t} value={t} disabled={venue ? !["1m","1d","1w"].includes(t) : session!=="regular" && !["1m","5m","15m","30m"].includes(t)}>{t}</option>)}</select></label>
+      {market === "kr_stock" && <label>시세 출처 <select aria-label="시세 출처" value={venue} onChange={e => {
         setVenue(e.target.value);
         if (e.target.value && !["1m", "1d", "1w"].includes(timeframe)) setTimeframe("1m");
       }}><option value="">Yahoo Finance</option><option value="krx">KRX</option><option value="nxt">NXT</option></select></label>}
-      {market==="us_stock" && <label>거래 세션 <select value={session} onChange={e=>{setSession(e.target.value);if(e.target.value!=="regular" && !["1m","5m","15m","30m"].includes(timeframe))setTimeframe("5m");}}><option value="regular">정규장</option><option value="pre">프리마켓</option><option value="post">애프터마켓</option><option value="overnight" disabled>오버나이트 (비활성)</option></select></label>}
+      {market==="us_stock" && <label>거래 세션 <select aria-label="거래 세션" value={session} onChange={e=>{setSession(e.target.value);if(e.target.value!=="regular" && !["1m","5m","15m","30m"].includes(timeframe))setTimeframe("5m");}}><option value="regular">정규장</option><option value="pre">프리마켓</option><option value="post">애프터마켓</option><option value="overnight" disabled>오버나이트 (비활성)</option></select></label>}
     </div>
     <p>{symbol} · {market==="us_stock"?"USD":"KRW"} · {timeframe} · {status}</p>
     <div ref={host} style={{height:460,width:"100%"}} />
