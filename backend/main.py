@@ -1,6 +1,6 @@
 import os
 from typing import Literal
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 app = FastAPI(title="AI Quant Platform V2", version="0.1.0")
@@ -12,10 +12,9 @@ class HealthResponse(BaseModel):
 def health():
     return HealthResponse(status="ok")
 
-from fastapi import HTTPException
 import httpx
 from .markets import Market, Instrument
-from .market_data import candles
+from .market_data import ProviderError, candles
 from .overnight import overnight_candles
 from .timeframes import Timeframe, DEFAULT_TIMEFRAME
 
@@ -37,5 +36,5 @@ async def market_candles(market: Market, symbol: str, timeframe: Timeframe = DEF
         raise HTTPException(status_code=503, detail="Market data provider not configured") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid symbol or market data") from exc
-    except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
+    except (ProviderError, httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
         raise HTTPException(status_code=502, detail="Market data provider unavailable") from exc
