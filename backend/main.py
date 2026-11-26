@@ -1,6 +1,6 @@
 import os
-from typing import Literal
-from fastapi import FastAPI, HTTPException
+from typing import Annotated, Literal
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 app = FastAPI(title="AI Quant Platform V2", version="0.1.0")
@@ -19,6 +19,7 @@ from .overnight import overnight_candles
 from .kis import kis_candles
 from .indicators import indicators
 from .analysis import analyze_chart
+from .simulation import backtest
 from .timeframes import Timeframe, DEFAULT_TIMEFRAME
 
 @app.get("/api/markets/{market}/candles")
@@ -57,3 +58,19 @@ async def market_analysis(
     venue: Literal["krx", "nxt"] | None = None,
 ):
     return await analyze_chart(lambda: market_candles(market, symbol, timeframe, session, venue))
+
+
+@app.get("/api/markets/{market}/backtest")
+async def market_backtest(
+    market: Market, symbol: str, timeframe: Timeframe = DEFAULT_TIMEFRAME,
+    session: Literal["regular", "pre", "post", "overnight"] = "regular",
+    venue: Literal["krx", "nxt"] | None = None,
+    initial_cash: Annotated[float, Query(gt=0, le=1e12)] = 10000,
+    fee_bps: Annotated[float, Query(ge=0, le=1000)] = 10,
+    slippage_bps: Annotated[float, Query(ge=0, le=1000)] = 5,
+):
+    snapshot = await market_candles(market, symbol, timeframe, session, venue)
+    if any(min(bar["open"], bar["close"]) <= 0 for bar in snapshot["candles"]):
+        raise HTTPException(502, "Invalid execution prices")
+    return {**backtest(snapshot["candles"], initial_cash, fee_bps, slippage_bps),
+            "currency": snapshot["currency"]}
