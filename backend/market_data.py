@@ -19,10 +19,10 @@ async def candles(instrument: Instrument):
             } for r in rows], key=lambda r: r["time"])
         symbol = instrument.symbol.upper()
         if instrument.market == Market.KR_STOCK:
-            if not (len(symbol) == 6 and symbol.isdigit()):
-                raise ValueError("Expected a six-digit Korean stock code")
-            # Initial support for KOSPI; KOSDAQ mapping will be added separately.
-            symbol += ".KS"
+            if len(symbol) == 6 and symbol.isdigit():
+                symbol += ".KS"
+            elif not (len(symbol) == 9 and symbol[:6].isdigit() and symbol[6:] in (".KS", ".KQ")):
+                raise ValueError("Expected six-digit code with optional .KS (KOSPI) or .KQ (KOSDAQ)")
         elif not symbol.replace("-", "").replace(".", "").isalnum():
             raise ValueError("Invalid stock symbol")
         response = await client.get("https://query1.finance.yahoo.com/v8/finance/chart/" + symbol,
