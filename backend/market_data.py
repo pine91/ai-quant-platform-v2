@@ -2,14 +2,16 @@
 from datetime import datetime, timezone
 import httpx
 from .markets import Market, Instrument
+from .timeframes import Timeframe, DEFAULT_TIMEFRAME, BITHUMB_MINUTES, YAHOO_INTERVALS, YAHOO_RANGES
 
-async def candles(instrument: Instrument):
+async def candles(instrument: Instrument, timeframe: Timeframe = DEFAULT_TIMEFRAME):
     async with httpx.AsyncClient(timeout=15) as client:
         if instrument.market == Market.CRYPTO:
             symbol = instrument.symbol.upper()
             if symbol.endswith("-KRW"):
                 symbol = "KRW-" + symbol[:-4]
-            response = await client.get("https://api.bithumb.com/v1/candles/days", params={"market": symbol, "count": 100})
+            path = ("days" if timeframe == Timeframe.D1 else "weeks" if timeframe == Timeframe.W1 else f"minutes/{BITHUMB_MINUTES[timeframe.value]}")
+            response = await client.get("https://api.bithumb.com/v1/candles/" + path, params={"market": symbol, "count": 100})
             response.raise_for_status()
             rows = response.json()
             return sorted([{
@@ -25,8 +27,10 @@ async def candles(instrument: Instrument):
                 raise ValueError("Expected six-digit code with optional .KS (KOSPI) or .KQ (KOSDAQ)")
         elif not symbol.replace("-", "").replace(".", "").isalnum():
             raise ValueError("Invalid stock symbol")
+        if timeframe == Timeframe.H4:
+            raise ValueError("Stock 4h candles require session-aware aggregation")
         response = await client.get("https://query1.finance.yahoo.com/v8/finance/chart/" + symbol,
-            params={"range": "6mo", "interval": "1d"}, headers={"User-Agent": "Mozilla/5.0"})
+            params={"range": YAHOO_RANGES[timeframe.value], "interval": YAHOO_INTERVALS[timeframe.value]}, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
         result = response.json()["chart"]["result"][0]
         quote = result["indicators"]["quote"][0]
