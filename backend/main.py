@@ -16,13 +16,21 @@ import httpx
 from .markets import Market, Instrument
 from .market_data import ProviderError, candles
 from .overnight import overnight_candles
+from .kis import kis_candles
 from .timeframes import Timeframe, DEFAULT_TIMEFRAME
 
 @app.get("/api/markets/{market}/candles")
-async def market_candles(market: Market, symbol: str, timeframe: Timeframe = DEFAULT_TIMEFRAME, session: Literal["regular", "pre", "post", "overnight"] = "regular"):
+async def market_candles(market: Market, symbol: str, timeframe: Timeframe = DEFAULT_TIMEFRAME, session: Literal["regular", "pre", "post", "overnight"] = "regular", venue: Literal["krx", "nxt"] | None = None):
     try:
         instrument = Instrument(market=market, symbol=symbol)
-        if session == "overnight":
+        if venue:
+            if market != Market.KR_STOCK or session != "regular":
+                raise ValueError("KIS venue selection is for Korean stocks only")
+            try:
+                rows = await kis_candles(symbol, timeframe, venue)
+            except RuntimeError as exc:
+                raise HTTPException(503, "KIS quotes not configured") from exc
+        elif session == "overnight":
             if os.getenv("ENABLE_OVERNIGHT", "false").lower() != "true":
                 raise HTTPException(status_code=503, detail="Overnight trading data is disabled")
             if market != Market.US_STOCK:
@@ -31,7 +39,7 @@ async def market_candles(market: Market, symbol: str, timeframe: Timeframe = DEF
         else:
             rows = await candles(instrument, timeframe, session=session)
         return {"market": market, "symbol": symbol, "currency": instrument.currency,
-                "interval": timeframe.value, "session": session, "candles": rows}
+                "interval": timeframe.value, "session": session, "venue": venue, "candles": rows}
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Market data provider not configured") from exc
     except ValueError as exc:

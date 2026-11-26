@@ -77,3 +77,37 @@ def test_provider_empty_or_unavailable(upstream, code, payload, expected):
     assert response.status_code == expected
     if expected == 200:
         assert response.json()["candles"] == []
+
+
+@pytest.mark.parametrize(("venue", "market_code"), [("krx", "J"), ("nxt", "NX")])
+def test_kis_venue_is_sent_to_provider(upstream, monkeypatch, venue, market_code):
+    for name in ("KIS_APP_KEY", "KIS_APP_SECRET", "KIS_ACCESS_TOKEN"):
+        monkeypatch.setenv(name, "fixture")
+
+    def handle(request):
+        assert request.url.host == "openapi.koreainvestment.com"
+        assert request.url.params["FID_COND_MRKT_DIV_CODE"] == market_code
+        assert request.url.params["FID_INPUT_ISCD"] == "247540"
+        assert request.headers["tr_id"] == "FHKST03010100"
+        return httpx.Response(200, json={"rt_cd": "0", "output2": [{
+            "stck_bsop_date": "20250310", "stck_oprc": "100", "stck_hgpr": "110",
+            "stck_lwpr": "99", "stck_clpr": "105",
+        }]})
+
+    upstream(handle)
+    response = TestClient(app).get(f"/api/markets/kr_stock/candles?symbol=247540.KQ&venue={venue}&timeframe=1d")
+    assert response.status_code == 200
+    assert response.json()["venue"] == venue
+    assert response.json()["candles"][0]["close"] == 105
+
+
+def test_nxt_without_credentials_returns_unconfigured(upstream, monkeypatch):
+    monkeypatch.delenv("KIS_ACCESS_TOKEN", raising=False)
+
+    def unexpected(request):
+        pytest.fail("NXT must not fall back to another provider")
+
+    upstream(unexpected)
+    response = TestClient(app).get("/api/markets/kr_stock/candles?symbol=005930&venue=nxt&timeframe=1m")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "KIS quotes not configured"
