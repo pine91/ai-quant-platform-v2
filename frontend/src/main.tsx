@@ -14,6 +14,7 @@ function App() {
   const [market, setMarket] = useState<Market>("crypto");
   const [symbol, setSymbol] = useState(markets.crypto[0]);
   const [timeframe, setTimeframe] = useState("5m");
+  const [session, setSession] = useState("regular");
   const [status, setStatus] = useState("조회 중");
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -30,7 +31,7 @@ function App() {
     });
     const controller = new AbortController();
     setStatus("조회 중");
-    fetch("/api/markets/" + market + "/candles?" + new URLSearchParams({symbol, timeframe}), {signal: controller.signal})
+    fetch("/api/markets/" + market + "/candles?" + new URLSearchParams({symbol, timeframe, session}), {signal: controller.signal})
       .then(async response => { if (!response.ok) throw new Error("시세 조회 실패 (" + response.status + ")"); return response.json(); })
       .then(result => {
         if (controller.signal.aborted) return;
@@ -39,21 +40,22 @@ function App() {
         setStatus(result.candles.length ? "시세 조회 완료" : "조회 데이터 없음");
       }).catch(error => { if (!controller.signal.aborted) setStatus(String(error.message)); });
     return () => { controller.abort(); chart.remove(); };
-  }, [market,symbol,timeframe]);
+  }, [market,symbol,timeframe,session]);
   return <main style={{maxWidth:1200,margin:"auto",padding:24,fontFamily:"system-ui,sans-serif"}}>
     <h1>AI Quant Platform V2</h1>
     <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-      <label>시장 <select value={market} onChange={e=>{const m=e.target.value as Market;setMarket(m);setSymbol(markets[m][0]);if(m!=="crypto" && timeframe==="4h")setTimeframe("5m");}}>
+      <label>시장 <select value={market} onChange={e=>{const m=e.target.value as Market;setMarket(m);setSymbol(markets[m][0]);setSession("regular");}}>
         {Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}
       </select></label>
       <label>종목 <select value={symbol} onChange={e=>setSymbol(e.target.value)}>
         {markets[market].map(s=><option key={s}>{s}</option>)}
       </select></label>
-      <label>시간대 <select value={timeframe} onChange={e=>setTimeframe(e.target.value)}>{["1m","5m","15m","30m","1h","4h","1d","1w"].map(t=><option key={t} value={t} disabled={t==="4h" && market!=="crypto"}>{t}</option>)}</select></label>
+      <label>시간대 <select value={timeframe} onChange={e=>setTimeframe(e.target.value)}>{["1m","5m","15m","30m","1h","4h","1d","1w"].map(t=><option key={t} value={t} disabled={session!=="regular" && !["1m","5m","15m","30m"].includes(t)}>{t}</option>)}</select></label>
+      {market==="us_stock" && <label>거래 세션 <select value={session} onChange={e=>{setSession(e.target.value);if(e.target.value!=="regular" && !["1m","5m","15m","30m"].includes(timeframe))setTimeframe("5m");}}><option value="regular">정규장</option><option value="pre">프리마켓</option><option value="post">애프터마켓</option><option value="overnight" disabled>오버나이트 (비활성)</option></select></label>}
     </div>
     <p>{symbol} · {market==="us_stock"?"USD":"KRW"} · {timeframe} · {status}</p>
     <div ref={host} style={{height:460,width:"100%"}} />
-    <section><h2>AI 분석</h2><p>AI 및 실시간 시세 API 연동 예정</p></section>
+    <section><h2>AI 분석</h2><p>AI 분석 연동 예정</p></section>
   </main>;
 }
 createRoot(document.getElementById("root")!).render(<App />);
