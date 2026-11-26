@@ -5,7 +5,11 @@ import httpx
 from .markets import Market, Instrument
 from .timeframes import Timeframe, DEFAULT_TIMEFRAME, BITHUMB_MINUTES, YAHOO_INTERVALS, YAHOO_RANGES
 
-async def candles(instrument: Instrument, timeframe: Timeframe = DEFAULT_TIMEFRAME):
+async def candles(instrument: Instrument, timeframe: Timeframe = DEFAULT_TIMEFRAME, session: str = "regular"):
+    if session not in ("regular", "pre", "post"):
+        raise ValueError("Invalid session")
+    if session != "regular" and (instrument.market != Market.US_STOCK or timeframe in (Timeframe.D1, Timeframe.W1, Timeframe.H4, Timeframe.H1)):
+        raise ValueError("Extended sessions currently support US stock minute candles only")
     async with httpx.AsyncClient(timeout=15) as client:
         if instrument.market == Market.CRYPTO:
             symbol = instrument.symbol.upper()
@@ -32,7 +36,7 @@ async def candles(instrument: Instrument, timeframe: Timeframe = DEFAULT_TIMEFRA
         if aggregate:
             timeframe = Timeframe.H1
         response = await client.get("https://query1.finance.yahoo.com/v8/finance/chart/" + symbol,
-            params={"range": YAHOO_RANGES[timeframe.value], "interval": YAHOO_INTERVALS[timeframe.value]}, headers={"User-Agent": "Mozilla/5.0"})
+            params={"range": YAHOO_RANGES[timeframe.value], "interval": YAHOO_INTERVALS[timeframe.value], "includePrePost": str(session != "regular").lower()}, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
         result = response.json()["chart"]["result"][0]
         quote = result["indicators"]["quote"][0]
@@ -40,6 +44,10 @@ async def candles(instrument: Instrument, timeframe: Timeframe = DEFAULT_TIMEFRA
                 for i,t in enumerate(result["timestamp"])
                 if all(quote[k][i] is not None for k in ("open","high","low","close"))]
 
+        if session != "regular":
+            zone = ZoneInfo("America/New_York")
+            start, end = (240, 570) if session == "pre" else (960, 1200)
+            rows = [r for r in rows if start <= (lambda d: d.hour * 60 + d.minute)(datetime.fromtimestamp(r["time"], zone)) < end]
         if not aggregate:
             return rows
         zone = ZoneInfo("Asia/Seoul" if instrument.market == Market.KR_STOCK else "America/New_York")
